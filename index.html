@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tilgungsrechner</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --surface: #ffffff; --text: #1b2130; --muted: #5f6878; --border: #dde2ea;
+    --accent: #2456d3; --accent-soft: #e8eefc; --pos: #17784c; --neg: #bf3a2b;
+    --hl: #fff5d6; --sum: #eef1f6; --zins: #f7f8fa; --fikt: #f3ecff; --fikt-text: #6b3fc4;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #11141a; --surface: #1a1f28; --text: #e5e8ee; --muted: #98a1b0; --border: #2c3442;
+      --accent: #7ba2ff; --accent-soft: #1f2a45; --pos: #4cc38a; --neg: #ff7e6e;
+      --hl: #3a3320; --sum: #222935; --zins: #161a21; --fikt: #2a2240; --fikt-text: #b99cff;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #11141a; --surface: #1a1f28; --text: #e5e8ee; --muted: #98a1b0; --border: #2c3442;
+    --accent: #7ba2ff; --accent-soft: #1f2a45; --pos: #4cc38a; --neg: #ff7e6e;
+    --hl: #3a3320; --sum: #222935; --zins: #161a21; --fikt: #2a2240; --fikt-text: #b99cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 0 0 14px; }
+  .sub { color: var(--muted); margin: 0 0 18px; }
+  .grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  @media (max-width: 860px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; min-width: 0; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+  @media (max-width: 520px) { .fields { grid-template-columns: 1fr; } }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+  label .hint { font-size: .78rem; }
+  input, select {
+    font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; width: 100%; min-width: 0;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .calc { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; padding: 7px 0; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); padding: 7px 12px; white-space: nowrap;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  :root[data-theme="dark"] button.primary { color: #0d1220; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) button.primary { color: #0d1220; } }
+  button.icon { padding: 6px 10px; }
+
+  /* Kreditverwaltung */
+  .filebar { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.3fr) auto; gap: 12px; align-items: end; margin-bottom: 16px; }
+  @media (max-width: 860px) { .filebar { grid-template-columns: minmax(0, 1fr); } }
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; }
+  .status { font-size: .82rem; color: var(--muted); margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  .status .dirty { color: var(--neg); font-weight: 600; }
+  .linkbtn { border: 0; background: none; color: var(--accent); padding: 0; font-size: .82rem; text-decoration: underline; }
+
+  /* Änderungen */
+  .changes { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+  .change { border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+  .change.fiktiv { background: var(--fikt); border-color: transparent; }
+  .change .row { display: grid; grid-template-columns: 1.2fr 1fr 1fr auto auto; gap: 8px; align-items: end; }
+  @media (max-width: 560px) { .change .row { grid-template-columns: 1fr 1fr; } }
+  .change .check { padding-bottom: 8px; }
+  .effect { margin-top: 8px; font-size: .84rem; display: flex; flex-wrap: wrap; gap: 4px 14px; font-variant-numeric: tabular-nums; }
+  .effect b { font-weight: 600; }
+  .effect .lbl { color: var(--muted); }
+  .empty { color: var(--muted); font-size: .9rem; margin: 0 0 12px; }
+  .note { color: var(--muted); font-size: .82rem; margin: 12px 0 0; }
+  .error { color: var(--neg); font-weight: 600; margin: 12px 0 0; }
+
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 16px 0; }
+  @media (max-width: 860px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 460px) { .kpis { grid-template-columns: minmax(0, 1fr); } }
+  .kpi { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  .kpi .t { font-size: .8rem; color: var(--muted); }
+  .kpi .v { font-size: 1.25rem; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .kpi .c { font-size: .82rem; color: var(--muted); margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .pos { color: var(--pos); } .neg { color: var(--neg); }
+
+  /* Tabelle */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 14px; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .toolbar .opts { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .check { flex-direction: row; align-items: center; gap: 6px; color: var(--text); font-size: .9rem; }
+  .check input { width: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: .8rem; color: var(--muted); margin-bottom: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; border: 1px solid var(--border); }
+  .tablewrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; font-size: .9rem; }
+  th, td { padding: 6px 10px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; width: 1%; }
+  thead th { position: sticky; top: 0; background: var(--surface); font-size: .78rem; color: var(--muted); font-weight: 600; z-index: 1; white-space: normal; vertical-align: bottom; line-height: 1.25; }
+  tbody tr:hover td { background: var(--accent-soft); }
+  tr.zins td { background: var(--zins); color: var(--muted); }
+  tr.changed td { background: var(--hl); }
+  tr.today td:first-child { box-shadow: inset 3px 0 0 var(--accent); font-weight: 700; color: var(--accent); }
+  tr.year td { background: var(--sum); font-weight: 600; font-size: .85rem; }
+  tr.final td { background: var(--accent-soft); font-weight: 700; border-top: 2px solid var(--accent); }
+  tr.ann td { white-space: normal; text-align: left; font-size: .82rem; padding: 5px 10px; background: var(--hl); border-bottom: 0; }
+  tr.ann.fiktiv td { background: var(--fikt); }
+  tr.ann .tag { display: inline-block; font-size: .7rem; font-weight: 700; padding: 0 6px; border-radius: 99px; margin-right: 6px; background: var(--muted); color: var(--surface); }
+  tr.ann.fiktiv .tag { background: var(--fikt-text); }
+  tr.ann .sep { color: var(--muted); margin: 0 6px; }
+  tfoot td { font-weight: 650; background: var(--sum); }
+  @media print {
+    .noprint { display: none !important; }
+    body { background: #fff; color: #000; }
+    .tablewrap { overflow: visible; border: 0; }
+    thead th { position: static; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tilgungsrechner Annuitätendarlehen</h1>
+  <p class="sub">Monatlicher Tilgungsplan bis Ende der Sollzinsbindung – mit tatsächlichen und fiktiven Änderungen des Tilgungssatzes.</p>
+
+  <section class="card noprint" style="margin-bottom:16px">
+    <div class="filebar">
+      <label>Name des Kredits
+        <input id="name" placeholder="z. B. Hausbank Baufinanzierung">
+      </label>
+      <label>Gespeicherten Kredit laden
+        <select id="fileSelect"><option value="">– Ordner noch nicht verbunden –</option></select>
+      </label>
+      <div class="btns">
+        <button class="primary" id="saveBtn">Speichern</button>
+        <button id="newBtn">Neu</button>
+        <button id="deleteBtn" disabled>Löschen</button>
+      </div>
+    </div>
+    <div class="status">
+      <span id="dirStatus"></span>
+      <button class="linkbtn" id="dirBtn">Ordner wählen</button>
+      <span id="dirtyStatus"></span>
+      <span style="margin-left:auto; display:flex; gap:14px">
+        <button class="linkbtn" id="exportBtn">JSON herunterladen</button>
+        <button class="linkbtn" id="importBtn">JSON-Datei öffnen</button>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
+      </span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Darlehensvertrag</h2>
+      <div class="fields">
+        <label>Darlehensteil = Berechnungskapital (€)
+          <input id="kapital" inputmode="decimal">
+        </label>
+        <label>Valuta (Auszahlung / Kreditbeginn)
+          <input id="valuta" type="date">
+        </label>
+        <label>Anfangsdatum (erste Zins- und Tilgungsrate)
+          <input id="start" type="date">
+        </label>
+        <label>Sollzins p.a. (%)
+          <input id="zins" inputmode="decimal">
+        </label>
+        <label>Anfangstilgung p.a. (%)
+          <input id="tilgung" inputmode="decimal">
+        </label>
+        <label>Sollzinsbindung (Jahre ab Kreditbeginn)
+          <input id="zb" inputmode="decimal">
+          <span class="hint" id="zbEnd"></span>
+        </label>
+        <label>Zinsrate Valuta – Anfangsdatum
+          <span class="calc" id="zinsrate">–</span>
+          <span class="hint">nur Zinsen, keine Tilgung</span>
+        </label>
+        <label>Zins- und Tilgungsrate neu (€/Monat)
+          <input id="rateOverride" inputmode="decimal">
+          <span class="hint" id="rateHint"></span>
+        </label>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Änderungen</h2>
+      <div id="changes" class="changes"></div>
+      <p id="noChanges" class="empty">Noch keine Änderung. Lege fest, ab welchem Monat ein neuer Tilgungssatz gilt.</p>
+      <button class="primary noprint" id="addChange">+ Änderung hinzufügen</button>
+      <p class="note">„Fiktiv“ = Gedankenspiel. Ohne Haken gilt die Änderung als tatsächlich erfolgt und gehört zum Ist-Plan. Die Wirkung jeder Änderung wird gegenüber dem Plan mit allen früheren Änderungen berechnet. Zinsen gesamt und Laufzeit setzen voraus, dass der Sollzins auch nach der Zinsbindung gleich bleibt.</p>
+      <p class="note">Neue Rate = Berechnungskapital × (Sollzins + neuer Tilgungssatz) ÷ 12. Die Sollzinsbindung bleibt unverändert. Eine Sondertilgung wird nach der Monatsrate verrechnet.</p>
+      <p id="error" class="error" hidden></p>
+    </section>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="toolbar">
+    <h2 style="margin:0">Tilgungsplan</h2>
+    <div class="opts noprint">
+      <label class="check"><input type="checkbox" id="optYear"> Jahressummen</label>
+      <label class="check"><input type="checkbox" id="optCompare" checked> Vergleich mit Ist-Plan</label>
+      <button id="print">Drucken</button>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--zins)"></i>nur Zinsrate</span>
+    <span><i style="background:var(--hl)"></i>tatsächliche Änderung</span>
+    <span><i style="background:var(--fikt)"></i>fiktive Änderung</span>
+    <span><i style="background:var(--accent)"></i>aktueller Monat</span>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+      <tfoot id="tfoot"></tfoot>
+    </table>
+  </div>
+</main>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const STORE = 'tilgungsrechner.v1';
+  const APP = 'tilgungsrechner';
+  const eurFmt = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
+  const eur = c => eurFmt.format(c / 100);
+  const pctFmt = new Intl.NumberFormat('de-DE', { maximumFractionDigits: 3 });
+  const esc = s => String(s).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+
+  // ---- Parsing / Datum ----
+  function parseNum(s) {
+    if (s == null) return NaN;
+    s = String(s).trim().replace(/[\s€%]/g, '');
+    if (!s) return NaN;
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+    return Number(s);
+  }
+  const numDE = n => String(n).replace('.', ',');
+  const ym = (y, m) => y * 12 + (m - 1);                       // m = 1..12
+  const ymLabel = i => String(i % 12 + 1).padStart(2, '0') + '/' + String(Math.floor(i / 12) % 100).padStart(2, '0');
+  function parseDate(v) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || '');
+    return m ? { y: +m[1], m: +m[2], d: +m[3] } : null;
+  }
+  function parseMonth(v) {
+    const m = /^(\d{4})-(\d{2})$/.exec(v || '');
+    return m ? ym(+m[1], +m[2]) : null;
+  }
+  const monthValue = i => Math.floor(i / 12) + '-' + String(i % 12 + 1).padStart(2, '0');
+  const dateDE = d => d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const now = new Date();
+  const todayYm = ym(now.getFullYear(), now.getMonth() + 1);
+
+  // ---- Zustand ----
+  const fieldIds = ['kapital', 'valuta', 'start', 'zins', 'tilgung', 'zb', 'rateOverride'];
+  const defaults = {
+    name: '', file: '', dirty: false,
+    kapital: '250.000', valuta: '2019-01-01', start: '2019-02-28', zins: '1,5', tilgung: '2',
+    zb: '10', rateOverride: '', changes: [], optYear: false, optCompare: true
+  };
+  let state;
+  try { state = Object.assign({}, defaults, JSON.parse(localStorage.getItem(STORE) || '{}')); }
+  catch { state = Object.assign({}, defaults); }
+  state.changes.forEach(ch => { if (ch.fiktiv === undefined) ch.fiktiv = true; });
+  const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
+  const touch = () => { state.dirty = true; renderStatus(); };
+
+  function fillInputs() {
+    fieldIds.forEach(id => { $(id).value = state[id]; });
+    $('name').value = state.name;
+  }
+  fieldIds.forEach(id => {
+    $(id).addEventListener('input', () => { state[id] = $(id).value; touch(); update(); });
+  });
+  $('name').addEventListener('input', () => { state.name = $('name').value; touch(); save(); });
+  $('optYear').checked = state.optYear;
+  $('optCompare').checked = state.optCompare;
+  $('optYear').addEventListener('change', e => { state.optYear = e.target.checked; update(); });
+  $('optCompare').addEventListener('change', e => { state.optCompare = e.target.checked; update(); });
+  $('print').addEventListener('click', () => window.print());
+
+  // ---- JSON-Format ----
+  function toData() {
+    const num = s => { const n = parseNum(s); return Number.isFinite(n) ? n : null; };
+    return {
+      app: APP, version: 1, name: state.name.trim(), gespeichert: new Date().toISOString(),
+      vertrag: {
+        kapital: num(state.kapital), valuta: state.valuta, start: state.start,
+        zins: num(state.zins), tilgung: num(state.tilgung), zb: num(state.zb),
+        rateOverride: num(state.rateOverride)
+      },
+      aenderungen: state.changes.map(ch => ({
+        ab: ch.month, tilgung: num(ch.tilgung), sonder: num(ch.sonder), fiktiv: !!ch.fiktiv
+      }))
+    };
+  }
+  function applyData(d, file) {
+    if (!d || d.app !== APP) throw new Error('Keine Tilgungsrechner-Datei.');
+    const v = d.vertrag || {};
+    const str = x => x == null ? '' : (typeof x === 'number' ? numDE(x) : String(x));
+    fieldIds.forEach(id => { state[id] = v[id] == null ? (id === 'rateOverride' ? '' : defaults[id]) : str(v[id]); });
+    state.changes = (d.aenderungen || []).map(a => ({
+      month: a.ab || '', tilgung: str(a.tilgung), sonder: str(a.sonder), fiktiv: !!a.fiktiv
+    }));
+    state.name = d.name || '';
+    state.file = file || '';
+    state.dirty = false;
+    fillInputs(); renderChanges(); update(); renderStatus();
+  }
+
+  // ---- Speichern im Ordner (File System Access API) ----
+  const fsSupported = 'showDirectoryPicker' in window;
+  const idb = (() => {
+    let p;
+    const open = () => p || (p = new Promise((res, rej) => {
+      const r = indexedDB.open(APP, 1);
+      r.onupgradeneeded = () => r.result.createObjectStore('kv');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    }));
+    const tx = (mode, fn) => open().then(db => new Promise((res, rej) => {
+      const t = db.transaction('kv', mode); const req = fn(t.objectStore('kv'));
+      t.oncomplete = () => res(req.result); t.onerror = () => rej(t.error);
+    }));
+    return { get: k => tx('readonly', s => s.get(k)), set: (k, v) => tx('readwrite', s => s.put(v, k)) };
+  })();
+  let dir = null, dirGranted = false, files = [];
+
+  const sanitize = n => n.trim().replace(/[\\/:*?"<>|]+/g, '_').replace(/\s+/g, ' ') || 'Kredit';
+
+  async function initDir() {
+    if (!fsSupported) { renderStatus(); return; }
+    try {
+      dir = await idb.get('dir') || null;
+      if (dir) {
+        dirGranted = await dir.queryPermission({ mode: 'readwrite' }) === 'granted';
+        if (dirGranted) await refreshList();
+      }
+    } catch { dir = null; }
+    renderStatus();
+  }
+  async function pickDir() {
+    try {
+      dir = await window.showDirectoryPicker({ id: APP, mode: 'readwrite' });
+    } catch { return false; }
+    dirGranted = true;
+    try { await idb.set('dir', dir); } catch {}
+    await refreshList();
+    renderStatus();
+    return true;
+  }
+  async function ensureDir() {
+    if (!fsSupported) return false;
+    if (!dir) return pickDir();
+    if (dirGranted) return true;
+    try { dirGranted = await dir.requestPermission({ mode: 'readwrite' }) === 'granted'; } catch { dirGranted = false; }
+    if (dirGranted) await refreshList();
+    renderStatus();
+    return dirGranted;
+  }
+  async function refreshList() {
+    files = [];
+    for await (const [fname, h] of dir.entries()) {
+      if (h.kind !== 'file' || !fname.toLowerCase().endsWith('.json')) continue;
+      try {
+        const d = JSON.parse(await (await h.getFile()).text());
+        if (d.app === APP) files.push({ file: fname, name: d.name || fname.replace(/\.json$/i, '') });
+      } catch {}
+    }
+    files.sort((a, b) => a.name.localeCompare(b.name, 'de'));
+    renderSelect();
+  }
+  function renderSelect() {
+    const sel = $('fileSelect');
+    if (!fsSupported) {
+      sel.innerHTML = '<option value="">– Browser unterstützt keinen Ordnerzugriff –</option>';
+    } else if (!dir || !dirGranted) {
+      sel.innerHTML = `<option value="">– ${dir ? 'Ordnerzugriff erneut erlauben' : 'Ordner noch nicht verbunden'} –</option>`;
+    } else {
+      sel.innerHTML = `<option value="">${files.length ? '– Kredit auswählen –' : '– noch keine Kredite gespeichert –'}</option>` +
+        files.map(f => `<option value="${esc(f.file)}">${esc(f.name)}</option>`).join('');
+      sel.value = files.some(f => f.file === state.file) ? state.file : '';
+    }
+    $('deleteBtn').disabled = !(dirGranted && files.some(f => f.file === state.file));
+  }
+  function renderStatus() {
+    let s;
+    if (!fsSupported) s = 'Dieser Browser kann nicht direkt in einen Ordner speichern. Bitte Chrome oder Edge verwenden, oder JSON herunterladen bzw. öffnen.';
+    else if (!dir) s = 'Kein Ordner verbunden. Wähle beim ersten Speichern den Ordner, in dem diese HTML-Datei liegt.';
+    else if (!dirGranted) s = `Ordner „${esc(dir.name)}“ – Zugriff muss bestätigt werden.`;
+    else s = `Ordner: „${esc(dir.name)}“ · ${files.length} Kredit${files.length === 1 ? '' : 'e'}`;
+    $('dirStatus').innerHTML = s;
+    $('dirBtn').hidden = !fsSupported;
+    $('dirBtn').textContent = !dir ? 'Ordner wählen' : (dirGranted ? 'Anderen Ordner wählen' : 'Zugriff erlauben');
+    $('dirtyStatus').innerHTML = state.dirty ? '<span class="dirty">● ungespeicherte Änderungen</span>' : (state.file ? `gespeichert als ${esc(state.file)}` : '');
+    renderSelect();
+  }
+
+  $('dirBtn').addEventListener('click', async () => {
+    if (dir && !dirGranted) await ensureDir(); else await pickDir();
+  });
+  $('fileSelect').addEventListener('focus', () => { if (dir && !dirGranted) ensureDir(); });
+  $('fileSelect').addEventListener('mousedown', () => { if (fsSupported && (!dir || !dirGranted)) ensureDir(); });
+  $('fileSelect').addEventListener('change', async e => {
+    const fname = e.target.value;
+    if (!fname) return;
+    if (state.dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) { renderSelect(); return; }
+    try {
+      const h = await dir.getFileHandle(fname);
+      applyData(JSON.parse(await (await h.getFile()).text()), fname);
+      save();
+    } catch (err) { alert('Laden fehlgeschlagen: ' + err.message); renderSelect(); }
+  });
+  $('saveBtn').addEventListener('click', async () => {
+    if (!state.name.trim()) { alert('Bitte gib dem Kredit zuerst einen Namen.'); $('name').focus(); return; }
+    if (!fsSupported) { downloadJSON(); return; }
+    if (!await ensureDir()) return;
+    const fname = sanitize(state.name) + '.json';
+    if (fname !== state.file && files.some(f => f.file === fname) &&
+        !confirm(`„${fname}“ existiert bereits. Überschreiben?`)) return;
+    try {
+      const h = await dir.getFileHandle(fname, { create: true });
+      const w = await h.createWritable();
+      await w.write(JSON.stringify(toData(), null, 2));
+      await w.close();
+      state.file = fname; state.dirty = false; save();
+      await refreshList(); renderStatus();
+    } catch (err) { alert('Speichern fehlgeschlagen: ' + err.message); }
+  });
+  $('newBtn').addEventListener('click', () => {
+    if (state.dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
+    Object.assign(state, defaults, { changes: [], optYear: state.optYear, optCompare: state.optCompare });
+    fillInputs(); renderChanges(); update(); renderStatus();
+  });
+  $('deleteBtn').addEventListener('click', async () => {
+    if (!state.file || !confirm(`Datei „${state.file}“ wirklich löschen?`)) return;
+    try {
+      await dir.removeEntry(state.file);
+      state.file = ''; state.dirty = true; save();
+      await refreshList(); renderStatus();
+    } catch (err) { alert('Löschen fehlgeschlagen: ' + err.message); }
+  });
+  function downloadJSON() {
+    const blob = new Blob([JSON.stringify(toData(), null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = sanitize(state.name || 'Kredit') + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+  $('exportBtn').addEventListener('click', downloadJSON);
+  $('importBtn').addEventListener('click', () => $('importFile').click());
+  $('importFile').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    e.target.value = '';
+    if (!f) return;
+    if (state.dirty && !confirm('Ungespeicherte Änderungen verwerfen?')) return;
+    try { applyData(JSON.parse(await f.text()), ''); state.dirty = true; save(); renderStatus(); }
+    catch (err) { alert('Öffnen fehlgeschlagen: ' + err.message); }
+  });
+
+  // ---- Änderungen UI ----
+  function renderChanges() {
+    const box = $('changes');
+    box.innerHTML = '';
+    $('noChanges').hidden = state.changes.length > 0;
+    state.changes.forEach((ch, idx) => {
+      const el = document.createElement('div');
+      el.className = 'change' + (ch.fiktiv ? ' fiktiv' : '');
+      el.innerHTML = `
+        <div class="row">
+          <label>Ab Fälligkeitsmonat<input type="month" data-k="month"></label>
+          <label>Neue Tilgung p.a. (%)<input inputmode="decimal" data-k="tilgung" placeholder="unverändert"></label>
+          <label>Sondertilgung (€)<input inputmode="decimal" data-k="sonder" placeholder="0"></label>
+          <label class="check"><input type="checkbox" data-k="fiktiv"> fiktiv</label>
+          <button class="icon noprint" title="Änderung entfernen" aria-label="Änderung entfernen">✕</button>
+        </div>
+        <div class="effect" data-effect="${idx}"></div>`;
+      el.querySelectorAll('input').forEach(inp => {
+        const k = inp.dataset.k;
+        if (inp.type === 'checkbox') {
+          inp.checked = !!ch.fiktiv;
+          inp.addEventListener('change', () => { ch.fiktiv = inp.checked; el.classList.toggle('fiktiv', inp.checked); touch(); update(); });
+        } else {
+          inp.value = ch[k] || '';
+          inp.addEventListener('input', () => { ch[k] = inp.value; touch(); update(); });
+        }
+      });
+      el.querySelector('button').addEventListener('click', () => {
+        state.changes.splice(idx, 1); touch(); renderChanges(); update();
+      });
+      box.appendChild(el);
+    });
+  }
+  $('addChange').addEventListener('click', () => {
+    const last = state.changes.length ? parseMonth(state.changes[state.changes.length - 1].month) : null;
+    const m = last != null ? last + 12 : todayYm + 1;
+    state.changes.push({ month: monthValue(m), tilgung: '', sonder: '', fiktiv: true });
+    touch(); renderChanges(); update();
+  });
+
+  // ---- Berechnung ----
+  // Zinsberechnung 30/360, monatliche Fälligkeit, Beträge in Cent.
+  function calc(c, changes, horizonYm) {
+    const rows = [];
+    const rateFor = t => Math.round(c.kapital * (c.zins + t) / 100 / 12);
+    let rate = c.rateOverride != null ? c.rateOverride : rateFor(c.tilgung);
+    let tilgSatz = c.tilgung;
+    let rs = c.kapital;
+    const byYm = new Map();
+    for (const ch of changes) {
+      const key = Math.max(ch.ym, c.valutaYm);
+      if (!byYm.has(key)) byYm.set(key, []);
+      byYm.get(key).push(ch);
+    }
+    for (let m = c.valutaYm; m <= horizonYm && rs > 0; m++) {
+      const applied = [];
+      let sonder = 0;
+      for (const ch of byYm.get(m) || []) {
+        if (ch.tilgung != null) applied.push({ ch, vonSatz: tilgSatz, vonRate: rate, nachRate: rateFor(ch.tilgung) });
+        else applied.push({ ch });
+        if (ch.tilgung != null) { tilgSatz = ch.tilgung; rate = rateFor(ch.tilgung); }
+        if (ch.sonder > 0) sonder += ch.sonder;
+      }
+      const days = m === c.valutaYm ? Math.max(0, 31 - Math.min(c.valutaDay, 30)) : 30;
+      const zins = Math.round(rs * c.zins / 100 * days / 360);
+      let tilg, leist;
+      const zinsOnly = m < c.startYm;
+      if (zinsOnly) { tilg = 0; leist = zins; }
+      else {
+        leist = rate; tilg = rate - zins;
+        if (tilg >= rs) { tilg = rs; leist = rs + zins; }
+      }
+      rs -= tilg;
+      const s = Math.min(sonder, rs);
+      rs -= s;
+      rows.push({ ym: m, leist, zins, tilg, sonder: s, rs, zinsOnly, applied, tilgSatz, rate });
+    }
+    return { rows, rs };
+  }
+  const sum = (r, k) => r.rows.reduce((a, x) => a + x[k], 0);
+  // Kennzahlen eines Plans: Zinsen bis ZB-Ende, Zinsen bis Volltilgung, Laufzeit in Monaten
+  function metrics(c, changes, zbEndYm) {
+    const long = calc(c, changes, c.valutaYm + 12 * 100);
+    const zinsZB = long.rows.filter(r => r.ym <= zbEndYm).reduce((a, r) => a + r.zins, 0);
+    const paid = long.rs === 0;
+    const endYm = paid ? long.rows[long.rows.length - 1].ym : null;
+    return { long, zinsZB, zinsGesamt: sum(long, 'zins'), paid, endYm };
+  }
+
+  function readInputs() {
+    const errs = [];
+    const kapital = Math.round(parseNum(state.kapital) * 100);
+    const zins = parseNum(state.zins);
+    const tilgung = parseNum(state.tilgung);
+    const zbYears = parseNum(state.zb);
+    const v = parseDate(state.valuta), s = parseDate(state.start);
+    const ro = state.rateOverride.trim() ? Math.round(parseNum(state.rateOverride) * 100) : null;
+    if (!(kapital > 0)) errs.push('Berechnungskapital fehlt.');
+    if (!(zins >= 0)) errs.push('Sollzins fehlt.');
+    if (!(tilgung >= 0)) errs.push('Anfangstilgung fehlt.');
+    if (!(zbYears > 0)) errs.push('Sollzinsbindung fehlt.');
+    if (!v) errs.push('Valutadatum fehlt.');
+    if (!s) errs.push('Anfangsdatum fehlt.');
+    if (ro != null && !(ro > 0)) errs.push('Zins- und Tilgungsrate ist ungültig.');
+    if (errs.length) return { errs };
+    const valutaYm = ym(v.y, v.m), startYm = ym(s.y, s.m);
+    if (startYm < valutaYm) errs.push('Anfangsdatum liegt vor der Valuta.');
+    const zbMonths = Math.round(zbYears * 12);
+    const zbEndDate = new Date(v.y, v.m - 1 + zbMonths, v.d - 1);
+    const zbEndYm = ym(zbEndDate.getFullYear(), zbEndDate.getMonth() + 1);
+    const changes = [];
+    state.changes.forEach((ch, idx) => {
+      const m = parseMonth(ch.month);
+      if (m == null) return;
+      const t = ch.tilgung && ch.tilgung.trim() ? parseNum(ch.tilgung) : null;
+      const so = ch.sonder && ch.sonder.trim() ? Math.round(parseNum(ch.sonder) * 100) : 0;
+      if (t != null && !(t >= 0)) { errs.push(`Tilgungssatz ab ${ymLabel(m)} ist ungültig.`); return; }
+      if (!(so >= 0)) { errs.push(`Sondertilgung ${ymLabel(m)} ist ungültig.`); return; }
+      changes.push({ idx, ym: m, tilgung: t, sonder: so, fiktiv: !!ch.fiktiv });
+    });
+    changes.sort((a, b) => a.ym - b.ym || a.idx - b.idx);
+    return {
+      errs, changes,
+      c: { kapital, zins, tilgung, valutaYm, valutaDay: v.d, startYm, rateOverride: ro },
+      zbEndDate, zbEndYm
+    };
+  }
+
+  // ---- Darstellung ----
+  function kpi(title, value, cmp) {
+    return `<div class="kpi"><div class="t">${title}</div><div class="v">${value}</div>${cmp ? `<div class="c">${cmp}</div>` : ''}</div>`;
+  }
+  function delta(d, goodIfNegative = true) {
+    if (d === 0) return '±0,00 €';
+    const cls = (d < 0) === goodIfNegative ? 'pos' : 'neg';
+    return `<span class="${cls}">${d > 0 ? '+' : '−'}${eur(Math.abs(d))}</span>`;
+  }
+  const dur = n => { const y = Math.floor(n / 12), m = n % 12; return y ? `${y} J. ${m} M.` : `${m} M.`; };
+  function deltaDur(d) {
+    if (d === 0) return '±0 M.';
+    return `<span class="${d < 0 ? 'pos' : 'neg'}">${d > 0 ? '+' : '−'}${dur(Math.abs(d))}</span>`;
+  }
+  const payoffLabel = mt => mt.paid ? ymLabel(mt.endYm) : 'nicht absehbar';
+
+  // Wirkung einer Änderung gegenüber dem Plan mit allen früher sortierten Änderungen
+  function effectOf(before, after) {
+    const dz = after.zinsGesamt - before.zinsGesamt;
+    const dzb = after.zinsZB - before.zinsZB;
+    let dl;
+    if (before.paid && after.paid) dl = deltaDur(after.endYm - before.endYm);
+    else if (before.paid === after.paid) dl = '–';
+    else dl = after.paid ? '<span class="pos">wird abbezahlt</span>' : '<span class="neg">nicht mehr absehbar</span>';
+    return { dz, dzb, dl };
+  }
+
+  function update() {
+    save();
+    const inp = readInputs();
+    const errBox = $('error');
+    if (inp.errs.length) { errBox.textContent = inp.errs.join(' '); errBox.hidden = false; }
+    else errBox.hidden = true;
+    if (!inp.c) { $('tbody').innerHTML = ''; $('tfoot').innerHTML = ''; $('kpis').innerHTML = ''; return; }
+
+    const { c, changes, zbEndDate, zbEndYm } = inp;
+    const real = changes.filter(ch => !ch.fiktiv);
+    const hasFiktiv = changes.some(ch => ch.fiktiv);
+    const calcRate = Math.round(c.kapital * (c.zins + c.tilgung) / 100 / 12);
+    const baseRate = c.rateOverride != null ? c.rateOverride : calcRate;
+    const zinsrate = Math.round(c.kapital * c.zins / 100 / 12);
+
+    $('zbEnd').textContent = `Ende: ${dateDE(zbEndDate)}`;
+    $('zinsrate').textContent = c.startYm > c.valutaYm ? `${eur(zinsrate)} / Monat` : 'entfällt';
+    $('rateHint').textContent = `berechnet: ${eur(calcRate)} – leer lassen für Berechnung`;
+    $('rateOverride').placeholder = eur(calcRate);
+
+    // Wirkung je Änderung (kumulativ in zeitlicher Reihenfolge)
+    const effects = new Map();
+    let prev = metrics(c, [], zbEndYm);
+    changes.forEach((ch, i) => {
+      const cur = metrics(c, changes.slice(0, i + 1), zbEndYm);
+      effects.set(ch, effectOf(prev, cur));
+      prev = cur;
+    });
+    document.querySelectorAll('[data-effect]').forEach(el => {
+      const ch = changes.find(x => x.idx === +el.dataset.effect);
+      const e = ch && effects.get(ch);
+      el.innerHTML = e
+        ? `<span><span class="lbl">Zinsen gesamt</span> <b>${delta(e.dz)}</b></span><span><span class="lbl">bis ZB-Ende</span> <b>${delta(e.dzb)}</b></span><span><span class="lbl">Laufzeit</span> <b>${e.dl}</b></span>`
+        : '<span class="lbl">Monat angeben, um die Wirkung zu sehen.</span>';
+    });
+
+    const base = calc(c, real, zbEndYm);       // Ist-Plan (ohne fiktive Änderungen)
+    const scen = calc(c, changes, zbEndYm);    // Szenario (alle Änderungen)
+    const baseM = metrics(c, real, zbEndYm);
+    const scenM = prev;
+    const lastScen = scen.rows[scen.rows.length - 1];
+    const curRow = scen.rows.find(r => r.ym === todayYm);
+    const curRate = curRow && !curRow.zinsOnly ? curRow.rate : (lastScen ? lastScen.rate : baseRate);
+    const lastRate = lastScen ? lastScen.rate : baseRate;
+
+    let k = '';
+    k += kpi('Monatsrate aktuell', eur(curRate),
+      lastRate !== curRate ? `später: ${eur(lastRate)} · Vertrag: ${eur(baseRate)}` : `Vertrag: ${eur(baseRate)} · Zins ${pctFmt.format(c.zins)} %`);
+    k += kpi(`Restschuld Ende Sollzinsbindung (${dateDE(zbEndDate)})`, eur(scen.rs),
+      hasFiktiv ? `Ist-Plan: ${eur(base.rs)} · Δ ${delta(scen.rs - base.rs)}` : `bisher getilgt: ${eur(c.kapital - scen.rs)}`);
+    k += kpi('Zinsen bis Ende Sollzinsbindung', eur(sum(scen, 'zins')),
+      hasFiktiv ? `Ist-Plan: ${eur(sum(base, 'zins'))} · Δ ${delta(sum(scen, 'zins') - sum(base, 'zins'))}` : `Zinsen bis Volltilgung: ${eur(scenM.zinsGesamt)}`);
+    const pl = scenM.paid ? `${payoffLabel(scenM)} <small style="font-weight:500">(${dur(scenM.endYm + 1 - c.valutaYm)})</small>` : payoffLabel(scenM);
+    k += kpi('Volltilgung bei gleichem Zins', pl,
+      hasFiktiv ? `Ist-Plan: ${payoffLabel(baseM)}${baseM.paid && scenM.paid ? ' · Δ ' + deltaDur(scenM.endYm - baseM.endYm) : ''}` : `Zinsen gesamt: ${eur(scenM.zinsGesamt)}`);
+    $('kpis').innerHTML = k;
+
+    // Tabelle
+    const cmp = hasFiktiv && state.optCompare;
+    const hasSonder = scen.rows.some(r => r.sonder > 0);
+    const ncol = 5 + (hasSonder ? 1 : 0) + (cmp ? 2 : 0);
+    const baseByYm = new Map(base.rows.map(r => [r.ym, r]));
+    $('thead').innerHTML = `<tr><th>Fällig&shy;keits&shy;monat</th><th>Gesamt&shy;leistung</th><th>Zins- und verw. Kosten</th><th>Tilgung</th>${hasSonder ? '<th>Sonder&shy;tilgung</th>' : ''}<th>Restschuld</th>${cmp ? '<th>Restschuld Ist-Plan</th><th>Δ Rest&shy;schuld</th>' : ''}</tr>`;
+
+    let html = '';
+    let yr = { leist: 0, zins: 0, tilg: 0, sonder: 0 };
+    scen.rows.forEach((r, idx) => {
+      for (const a of r.applied) {
+        const ch = a.ch, e = effects.get(ch);
+        const parts = [];
+        if (ch.tilgung != null) parts.push(`Tilgung ${pctFmt.format(a.vonSatz)} % → <b>${pctFmt.format(ch.tilgung)} %</b> (Rate ${eur(a.vonRate)} → <b>${eur(a.nachRate)}</b>)`);
+        if (ch.sonder > 0) parts.push(`Sondertilgung <b>${eur(ch.sonder)}</b>`);
+        if (!parts.length) parts.push('keine Änderung angegeben');
+        html += `<tr class="ann${ch.fiktiv ? ' fiktiv' : ''}"><td colspan="${ncol}"><span class="tag">${ch.fiktiv ? 'FIKTIV' : 'ÄNDERUNG'}</span>Ab ${ymLabel(ch.ym)}: ${parts.join(' + ')}` +
+          (e ? `<span class="sep">|</span>Zinsen gesamt ${delta(e.dz)}<span class="sep">·</span>bis ZB-Ende ${delta(e.dzb)}<span class="sep">·</span>Laufzeit ${e.dl}` : '') + '</td></tr>';
+      }
+      const cls = [r.zinsOnly ? 'zins' : '', r.applied.length ? 'changed' : '', r.ym === todayYm ? 'today' : ''].filter(Boolean).join(' ');
+      const o = baseByYm.get(r.ym);
+      const oRs = o ? o.rs : 0;
+      html += `<tr class="${cls}"${r.zinsOnly ? ' title="nur Zinsrate"' : ''}><td>${ymLabel(r.ym)}</td><td>${eur(r.leist)}</td><td>${eur(r.zins)}</td><td>${eur(r.tilg)}</td>${hasSonder ? `<td>${r.sonder ? eur(r.sonder) : ''}</td>` : ''}<td>${eur(r.rs)}</td>${cmp ? `<td>${eur(oRs)}</td><td>${delta(r.rs - oRs)}</td>` : ''}</tr>`;
+      yr.leist += r.leist; yr.zins += r.zins; yr.tilg += r.tilg; yr.sonder += r.sonder;
+      const isLast = idx === scen.rows.length - 1;
+      if (state.optYear && (r.ym % 12 === 11 || isLast)) {
+        html += `<tr class="year"><td>Σ ${Math.floor(r.ym / 12)}</td><td>${eur(yr.leist)}</td><td>${eur(yr.zins)}</td><td>${eur(yr.tilg)}</td>${hasSonder ? `<td>${yr.sonder ? eur(yr.sonder) : ''}</td>` : ''}<td>${eur(r.rs)}</td>${cmp ? '<td></td><td></td>' : ''}</tr>`;
+        yr = { leist: 0, zins: 0, tilg: 0, sonder: 0 };
+      }
+    });
+    const lspan = 4 + (hasSonder ? 1 : 0);
+    if (scen.rs > 0) {
+      html += `<tr class="final"><td colspan="${lspan}">Restschuld Ende Sollzinsbindung ${dateDE(zbEndDate)}</td><td>${eur(scen.rs)}</td>${cmp ? `<td>${eur(base.rs)}</td><td>${delta(scen.rs - base.rs)}</td>` : ''}</tr>`;
+    } else {
+      html += `<tr class="final"><td colspan="${lspan}">Vollständig getilgt ${ymLabel(lastScen.ym)} (vor ZB-Ende ${dateDE(zbEndDate)})</td><td>${eur(0)}</td>${cmp ? `<td>${eur(base.rs)}</td><td>${delta(-base.rs)}</td>` : ''}</tr>`;
+    }
+    $('tbody').innerHTML = html;
+    $('tfoot').innerHTML = `<tr><td>Summe</td><td>${eur(sum(scen, 'leist'))}</td><td>${eur(sum(scen, 'zins'))}</td><td>${eur(sum(scen, 'tilg'))}</td>${hasSonder ? `<td>${eur(sum(scen, 'sonder'))}</td>` : ''}<td></td>${cmp ? '<td></td><td></td>' : ''}</tr>`;
+  }
+
+  fillInputs();
+  renderChanges();
+  update();
+  renderStatus();
+  initDir();
+})();
+</script>
+</body>
+</html>
