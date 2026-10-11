@@ -167,8 +167,8 @@
         <label>Anfangstilgung p.a. (%)
           <input id="tilgung" inputmode="decimal">
         </label>
-        <label>Sollzinsbindung (Jahre ab Kreditbeginn)
-          <input id="zb" inputmode="decimal">
+        <label>Ende der Sollzinsbindung
+          <input id="zbEnde" type="date">
           <span class="hint" id="zbEnd"></span>
         </label>
         <label>Zinsrate Valuta – Anfangsdatum
@@ -254,16 +254,24 @@
   const todayYm = ym(now.getFullYear(), now.getMonth() + 1);
 
   // ---- Zustand ----
-  const fieldIds = ['kapital', 'valuta', 'start', 'zins', 'tilgung', 'zb', 'rateOverride'];
+  const fieldIds = ['kapital', 'valuta', 'start', 'zins', 'tilgung', 'zbEnde', 'rateOverride'];
   const defaults = {
     name: '', file: '', dirty: false,
     kapital: '250.000', valuta: '2019-01-01', start: '2019-02-28', zins: '1,5', tilgung: '2',
-    zb: '10', rateOverride: '', changes: [], optYear: false, optCompare: true
+    zbEnde: '2028-12-31', rateOverride: '', changes: [], optYear: false, optCompare: true
   };
   let state;
   try { state = Object.assign({}, defaults, JSON.parse(localStorage.getItem(STORE) || '{}')); }
   catch { state = Object.assign({}, defaults); }
   state.changes.forEach(ch => { if (ch.fiktiv === undefined) ch.fiktiv = true; });
+  // Ältere Stände speicherten die Sollzinsbindung in Jahren ab Valuta
+  function zbFromYears(valuta, years) {
+    const v = parseDate(valuta), n = parseNum(years);
+    if (!v || !(n > 0)) return '';
+    const d = new Date(v.y, v.m - 1 + Math.round(n * 12), v.d - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  if (state.zb != null) { if (!state.zbEnde || state.zbEnde === defaults.zbEnde) state.zbEnde = zbFromYears(state.valuta, state.zb) || state.zbEnde; delete state.zb; }
   const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch {} };
   const touch = () => { state.dirty = true; renderStatus(); };
 
@@ -288,7 +296,7 @@
       app: APP, version: 1, name: state.name.trim(), gespeichert: new Date().toISOString(),
       vertrag: {
         kapital: num(state.kapital), valuta: state.valuta, start: state.start,
-        zins: num(state.zins), tilgung: num(state.tilgung), zb: num(state.zb),
+        zins: num(state.zins), tilgung: num(state.tilgung), zbEnde: state.zbEnde,
         rateOverride: num(state.rateOverride)
       },
       aenderungen: state.changes.map(ch => ({
@@ -301,6 +309,7 @@
     const v = d.vertrag || {};
     const str = x => x == null ? '' : (typeof x === 'number' ? numDE(x) : String(x));
     fieldIds.forEach(id => { state[id] = v[id] == null ? (id === 'rateOverride' ? '' : defaults[id]) : str(v[id]); });
+    if (v.zbEnde == null && v.zb != null) state.zbEnde = zbFromYears(state.valuta, v.zb) || defaults.zbEnde;
     state.changes = (d.aenderungen || []).map(a => ({
       month: a.ab || '', tilgung: str(a.tilgung), sonder: str(a.sonder), fiktiv: !!a.fiktiv
     }));
@@ -554,22 +563,22 @@
     const kapital = Math.round(parseNum(state.kapital) * 100);
     const zins = parseNum(state.zins);
     const tilgung = parseNum(state.tilgung);
-    const zbYears = parseNum(state.zb);
+    const z = parseDate(state.zbEnde);
     const v = parseDate(state.valuta), s = parseDate(state.start);
     const ro = state.rateOverride.trim() ? Math.round(parseNum(state.rateOverride) * 100) : null;
     if (!(kapital > 0)) errs.push('Berechnungskapital fehlt.');
     if (!(zins >= 0)) errs.push('Sollzins fehlt.');
     if (!(tilgung >= 0)) errs.push('Anfangstilgung fehlt.');
-    if (!(zbYears > 0)) errs.push('Sollzinsbindung fehlt.');
+    if (!z) errs.push('Ende der Sollzinsbindung fehlt.');
     if (!v) errs.push('Valutadatum fehlt.');
     if (!s) errs.push('Anfangsdatum fehlt.');
     if (ro != null && !(ro > 0)) errs.push('Zins- und Tilgungsrate ist ungültig.');
     if (errs.length) return { errs };
     const valutaYm = ym(v.y, v.m), startYm = ym(s.y, s.m);
     if (startYm < valutaYm) errs.push('Anfangsdatum liegt vor der Valuta.');
-    const zbMonths = Math.round(zbYears * 12);
-    const zbEndDate = new Date(v.y, v.m - 1 + zbMonths, v.d - 1);
-    const zbEndYm = ym(zbEndDate.getFullYear(), zbEndDate.getMonth() + 1);
+    const zbEndDate = new Date(z.y, z.m - 1, z.d);
+    const zbEndYm = ym(z.y, z.m);
+    if (zbEndYm < startYm) errs.push('Ende der Sollzinsbindung liegt vor dem Anfangsdatum.');
     const changes = [];
     state.changes.forEach((ch, idx) => {
       const m = parseMonth(ch.month);
@@ -630,7 +639,7 @@
     const baseRate = c.rateOverride != null ? c.rateOverride : calcRate;
     const zinsrate = Math.round(c.kapital * c.zins / 100 / 12);
 
-    $('zbEnd').textContent = `Ende: ${dateDE(zbEndDate)}`;
+    $('zbEnd').textContent = `Laufzeit ab Valuta: ${dur(zbEndYm + 1 - c.valutaYm)}`;
     $('zinsrate').textContent = c.startYm > c.valutaYm ? `${eur(zinsrate)} / Monat` : 'entfällt';
     $('rateHint').textContent = `berechnet: ${eur(calcRate)} – leer lassen für Berechnung`;
     $('rateOverride').placeholder = eur(calcRate);

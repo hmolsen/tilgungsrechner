@@ -15,7 +15,7 @@ Ein Tilgungsrechner für Annuitätendarlehen in einer einzigen HTML-Datei, ohne 
 | Anfangsdatum | Fälligkeitsmonat der ersten Zins- und Tilgungsrate |
 | Sollzins p.a. | Gebundener Sollzinssatz |
 | Anfangstilgung p.a. | Tilgungssatz bezogen auf das Berechnungskapital |
-| Sollzinsbindung | Laufzeit in Jahren ab Valuta |
+| Ende der Sollzinsbindung | Datum laut Vertrag. Der Tilgungsplan endet in diesem Monat. |
 | Zins- und Tilgungsrate neu | Optional: die Rate laut Vertrag. Leer = Berechnungskapital × (Zins + Tilgung) ÷ 12 |
 
 Zwischen Valuta und Anfangsdatum wird nur die **Zinsrate** fällig, also keine Tilgung.
